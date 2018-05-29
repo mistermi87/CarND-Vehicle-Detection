@@ -213,12 +213,16 @@ def get_spatial_whole_area(image, cspace_c,spatial_size, y_start, y_stop, layers
     else: img = np.copy(image)
     # resize image
     whole_area_spatial=[]
+    whole_area_ch=[]
     for layer in layers:
-        resize_factor=spatial_size/layer
+        resize_factor_s=spatial_size/layer
+        resize_factor_ch=64/layer
         y_stop_n=np.min([int(y_start+layer*xy_overlap*(vert_steps-1)+layer),y_stop])
-        layer_spatial=cv2.resize(img[y_start:y_stop_n,:,:],None,fx=resize_factor, fy=resize_factor, interpolation = cv2.INTER_AREA)
+        layer_spatial=cv2.resize(img[y_start:y_stop_n,:,:],None,fx=resize_factor_s, fy=resize_factor_s, interpolation = cv2.INTER_AREA)
+        layer_ch=cv2.resize(img[y_start:y_stop_n,:,:],None,fx=resize_factor_ch, fy=resize_factor_ch, interpolation = cv2.INTER_AREA)
         whole_area_spatial.append(layer_spatial)
-    return whole_area_spatial
+        whole_area_ch.append(layer_ch)
+    return whole_area_spatial, whole_area_ch
 
 def get_hog_whole_area(image, orient, pix_per_cell, cell_per_block, cspace_h, hog_channel, y_start, y_stop, layers, xy_overlap, vert_steps):
     #change color of frame for hog_analysis, according to training features

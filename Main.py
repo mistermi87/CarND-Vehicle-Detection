@@ -136,51 +136,62 @@ y_stop=656
 xy_overlap=0.5
 
 ####
-img_w_cars=[]
-for layer in layers:
-    scale=layer/64
-    y_stop_n=np.min([int(y_start+layer*xy_overlap*(vert_steps-1)+layer),y_stop])
-    image=find_cars(img, y_start, y_stop_n, scale, colorspace_c, colorspace_h, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins)
+# =============================================================================
+# img_w_cars=[]
+# for layer in layers:
+#     scale=layer/64
+#     y_stop_n=np.min([int(y_start+layer*xy_overlap*(vert_steps-1)+layer),y_stop])
+#     image=find_cars(img, y_start, y_stop_n, scale, colorspace_c, colorspace_h, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins)
+# =============================================================================
 
 
 
-#windows = slide_window2(img, layers,vert_steps, y_start,y_stop, xy_overlap)
-#print(len(windows))
-#                      
-#window_img = draw_boxes(img, windows, color=(0, 0, 255), thick=1)                    
-#plt.imsave('foo.png',window_img)
-#
-#
-#
-#layered_areas_spatial=  get_spatial_whole_area(img, colorspace_c, spatial_size, y_start, y_stop, layers, xy_overlap, vert_steps)
-##layered_areas_chist=  
-#layered_areas_hog=      get_hog_whole_area(img, orient, pix_per_cell, cell_per_block, colorspace_h, hog_channel, y_start, y_stop, layers, xy_overlap, vert_steps)
-#
-#
-#window_hogs=[]
-#for window in windows:
-#    window_size=window[1][0]-window[0][0] #x2-x1
-#    layer_num=np.searchsorted(layers, window_size)
-#    x1=window[0][0]
-#    y1=window[0][1]-y_start
-#    x2=window[1][0]
-#    y2=window[1][1]-y_start
-#    pix_per_cell_n=int(pix_per_cell*(layers[layer_num]/64))
-#    hoga_x2=int(x2/pix_per_cell_n-cell_per_block)
-#    hoga_x1=int(hoga_x2-(window_size/pix_per_cell_n-cell_per_block))
-#    hoga_y2=int(y2/pix_per_cell_n-cell_per_block)
-#    hoga_y1=int(hoga_y2-(window_size/pix_per_cell_n-cell_per_block))
-#    
-#    
-#    #if hog_channel == 'ALL':
-#    #        hog_features = []
-#    #        for channel in range(img.shape[2]):
-#    #            hog_features.append(layered_areas_hog[layer_num][channel])
-#    #        hog_features = np.ravel(hog_features)        
-#    #    else:
-#    #        hog_features = 
-#    
-#    window_hogs.append((hoga_x1, hoga_x2))
+windows = slide_window2(img, layers,vert_steps, y_start,y_stop, xy_overlap)
+print(len(windows))
+                      
+window_img = draw_boxes(img, windows, color=(0, 0, 255), thick=1)                    
+plt.imsave('foo.png',window_img)
+
+#precompute resized image for spatial color features and hog
+layered_areas_spatial, layered_areas_chist= get_spatial_whole_area(img, colorspace_c, spatial_size, y_start, y_stop, layers, xy_overlap, vert_steps) 
+layered_areas_hog= get_hog_whole_area(img, orient, pix_per_cell, cell_per_block, colorspace_h, hog_channel, y_start, y_stop, layers, xy_overlap, vert_steps)
+
+
+window_features=[]
+for window in windows:
+    window_size=window[1][0]-window[0][0] #x2-x1
+    layer_num=np.searchsorted(layers, window_size)
+    x1=window[0][0]
+    y1=window[0][1]-y_start
+    x2=window[1][0]
+    y2=window[1][1]-y_start
+    
+    pix_per_cell_n=int(pix_per_cell*(layers[layer_num]/64))
+    hoga_x2=int(x2/pix_per_cell_n-cell_per_block)
+    hoga_x1=int(hoga_x2-(window_size/pix_per_cell_n-cell_per_block))
+    hoga_y2=int(y2/pix_per_cell_n-cell_per_block)
+    hoga_y1=int(hoga_y2-(window_size/pix_per_cell_n-cell_per_block))
+    
+    if hog_channel == 'ALL':
+            hog_features = []
+            for channel in range(img.shape[2]):
+                hog_features.append(layered_areas_hog[layer_num][channel][hoga_y1:hoga_y2,hoga_x1:hoga_x2,:,:,:])
+            hog_features = np.ravel(hog_features)        
+    else:
+        hog_features = layered_areas_hog[layer_num][hoga_y1:hoga_y2,hoga_x1:hoga_x2,:,:,:]
+        hog_features = np.ravel(hog_features)
+    
+    zoom=window_size/spatial_size
+    x1s=int(x1*zoom)
+    x2s=int(x2*zoom)
+    y1s=int(y1*zoom)
+    y2s=int(y2*zoom)
+    spatial_features=np.hstack((layered_areas_spatial[layer_num][y1s:y2s,x1s:x2s,0].ravel(),\
+                               layered_areas_spatial[layer_num][y1s:y2s,x1s:x2s,1].ravel(),\
+                               layered_areas_spatial[layer_num][y1s:y2s,x1s:x2s,2].ravel()))
+    
+    window_features.append(np.concatenate(spatial_features,hog_features))
+    #to do schauen nach dateiformat in training 0-1 0-255....
 #           
 ##out_img = find_cars(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins)
 #
