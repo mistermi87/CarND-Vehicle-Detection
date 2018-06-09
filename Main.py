@@ -23,12 +23,18 @@ Deal with Multiple Detections and False Positives --> Heat Map
 
 import numpy as np
 import cv2
-import matplotlib.image as mpimg
+#import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import pickle
-from skimage.feature import hog
+#from skimage.feature import hog
 from sklearn.preprocessing import StandardScaler
-import glob
+from scipy.ndimage.measurements import label
+#import glob
+import time
+import seaborn as sns
+
+
+
 
 '''
 ############ HELPER FUNCTIONS ################
@@ -40,133 +46,67 @@ from helper_func import *
 ############ Image Pipeline ################
 '''
 
+'''
+#######Things that are done once, globally########
+'''
+
 # load a pe-trained svc model from a serialized (pickle) file
 dist_pickle = pickle.load( open("Classifier_and_params.pickle", "rb" ) )
 
 # get attributes of our svc object
 svc = dist_pickle["svc"]
+rand_forr = dist_pickle["rand_forr"]
+len_features = dist_pickle["len_features"]
 X_scaler = dist_pickle["X_scaler"]
 orient = dist_pickle["orient"]
 pix_per_cell = dist_pickle["pix_per_cell"]
 cell_per_block = dist_pickle["cell_per_block"]
 spatial_size = dist_pickle["spatial"]
 hist_bins = dist_pickle["histbin"]
+hist_range = dist_pickle["hist_range"]
 hog_channel = dist_pickle["hog_channel"]
-#colorspace_c=dist_pickle["colorspace_c"]
-#colorspace_h=dist_pickle["colorspace_h"]
+colorspace_c=dist_pickle["colorspace_c"]
+colorspace_h=dist_pickle["colorspace_h"]
 
-img = mpimg.imread('test_images/test1.jpg')
+img = cv2.imread('test_images/test6.jpg')
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-# Define a single function that can extract features using hog sub-sampling and make predictions
-def find_cars(img, ystart, ystop, scale, colorspace_c, colorspace_h, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins):
-    
-    draw_img = np.copy(img)
-    img = img.astype(np.float32)/255
-    
-    img_tosearch = img[ystart:ystop,:,:]
-    ctrans_tosearch = convert_color(img_tosearch, conv=colorspace_c)
-    htrans_tosearch = convert_color(img_tosearch, conv=colorspace_h)
-    
-    if scale != 1:
-        imshape = ctrans_tosearch.shape
-        ctrans_tosearch = cv2.resize(ctrans_tosearch, None, fx=int(1/scale), fy=int(1/scale), interpolation = cv2.INTER_AREA)
-        htrans_tosearch = cv2.resize(htrans_tosearch, None, fx=int(1/scale), fy=int(1/scale), interpolation = cv2.INTER_AREA)
-        
-    ch1 = htrans_tosearch[:,:,0]
-    ch2 = htrans_tosearch[:,:,1]
-    ch3 = htrans_tosearch[:,:,2]
-
-    # Define blocks and steps as above
-    nxblocks = (ch1.shape[1] // pix_per_cell) - cell_per_block + 1
-    nyblocks = (ch1.shape[0] // pix_per_cell) - cell_per_block + 1 
-    nfeat_per_block = orient*cell_per_block**2
-    
-    # 64 was the orginal sampling rate, with 8 cells and 8 pix per cell
-    window = 64
-    nblocks_per_window = (window // pix_per_cell) - cell_per_block + 1
-    cells_per_step = 2  # Instead of overlap, define how many cells to step
-    nxsteps = (nxblocks - nblocks_per_window) // cells_per_step + 1
-    nysteps = (nyblocks - nblocks_per_window) // cells_per_step + 1
-    
-    # Compute individual channel HOG features for the entire image
-    hog1 = get_hog_features(ch1, orient, pix_per_cell, cell_per_block, feature_vec=False)
-    hog2 = get_hog_features(ch2, orient, pix_per_cell, cell_per_block, feature_vec=False)
-    hog3 = get_hog_features(ch3, orient, pix_per_cell, cell_per_block, feature_vec=False)
-    
-    for xb in range(nxsteps):
-        for yb in range(nysteps):
-            ypos = yb*cells_per_step
-            xpos = xb*cells_per_step
-            # Extract HOG for this patch
-            hog_feat1 = hog1[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel() 
-            hog_feat2 = hog2[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel() 
-            hog_feat3 = hog3[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel() 
-            hog_features = np.hstack((hog_feat1, hog_feat2, hog_feat3))
-
-            xleft = xpos*pix_per_cell
-            ytop = ypos*pix_per_cell
-
-            # Extract the image patch
-            subimg = cv2.resize(ctrans_tosearch[ytop:ytop+window, xleft:xleft+window], (64,64))
-            print(subimg.shape)
-          
-            # Get color features
-            spatial_features = bin_spatial(subimg, size=spatial_size)
-            hist_features = color_hist(subimg, nbins=hist_bins)
-
-            # Scale features and make a prediction
-            test_features = X_scaler.transform(np.hstack((spatial_features, hist_features, hog_features)).reshape(1, -1))    
-            #test_features = X_scaler.transform(np.hstack((shape_feat, hist_feat)).reshape(1, -1))    
-            test_prediction = svc.predict(test_features)
-            
-            if test_prediction == 1:
-                xbox_left = np.int(xleft*scale)
-                ytop_draw = np.int(ytop*scale)
-                win_draw = np.int(window*scale)
-                cv2.rectangle(draw_img,(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart),(0,0,255),6) 
-                
-    return draw_img
-
-
-#windows = slide_window(img, x_start_stop=[None, None], y_start_stop=[400, 650], xy_window=(32, 32), xy_overlap=(1, 1))
-layers=[32,64,128,256]
+layers=[48,64,96,128]
 vert_steps=4
 y_start=400
 y_stop=656
-xy_overlap=0.5
+xy_overlap=0.4
 
-####
-# =============================================================================
-# img_w_cars=[]
-# for layer in layers:
-#     scale=layer/64
-#     y_stop_n=np.min([int(y_start+layer*xy_overlap*(vert_steps-1)+layer),y_stop])
-#     image=find_cars(img, y_start, y_stop_n, scale, colorspace_c, colorspace_h, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins)
-# =============================================================================
+img_width=img.shape[1]
+img_height=img.shape[0]
 
+windows = slide_window(img_width, layers, vert_steps, y_start,y_stop, xy_overlap)
 
-
-windows = slide_window2(img, layers,vert_steps, y_start,y_stop, xy_overlap)
-print(len(windows))
                       
-window_img = draw_boxes(img, windows, color=(0, 0, 255), thick=1)                    
-plt.imsave('foo.png',window_img)
+#window_img = draw_boxes(img, windows, color=(0, 0, 255), thick=1)                    
+#plt.imsave('foo.png',window_img)
+start_time = time.time()
+'''
+#######Things that are done for every frame########
+'''
 
 #precompute resized image for spatial color features and hog
-layered_areas_spatial, layered_areas_chist= get_spatial_whole_area(img, colorspace_c, spatial_size, y_start, y_stop, layers, xy_overlap, vert_steps) 
+layered_areas_spatial= get_spatial_whole_area(img, colorspace_c, spatial_size, y_start, y_stop, layers, xy_overlap, vert_steps) 
+print("--- %s seconds ---" % (time.time() - start_time))
 layered_areas_hog= get_hog_whole_area(img, orient, pix_per_cell, cell_per_block, colorspace_h, hog_channel, y_start, y_stop, layers, xy_overlap, vert_steps)
-
+print("--- %s seconds ---" % (time.time() - start_time))
 
 window_features=[]
 for window in windows:
     window_size=window[1][0]-window[0][0] #x2-x1
-    layer_num=np.searchsorted(layers, window_size)
+    layer_num=np.searchsorted(layers, window_size) #what layer to call
+    #borders of the windows 
     x1=window[0][0]
     y1=window[0][1]-y_start
     x2=window[1][0]
     y2=window[1][1]-y_start
-    
-    pix_per_cell_n=int(pix_per_cell*(layers[layer_num]/64))
+    #####   HOG   #####
+    pix_per_cell_n=int(pix_per_cell*(layers[layer_num]/64)) #"zoom" of the HOG features
     hoga_x2=int(x2/pix_per_cell_n-cell_per_block)
     hoga_x1=int(hoga_x2-(window_size/pix_per_cell_n-cell_per_block))
     hoga_y2=int(y2/pix_per_cell_n-cell_per_block)
@@ -175,13 +115,13 @@ for window in windows:
     if hog_channel == 'ALL':
             hog_features = []
             for channel in range(img.shape[2]):
-                hog_features.append(layered_areas_hog[layer_num][channel][hoga_y1:hoga_y2,hoga_x1:hoga_x2,:,:,:])
+                hog_features.append(layered_areas_hog[layer_num][channel][hoga_y1:hoga_y2+1,hoga_x1:hoga_x2+1,:,:,:])
             hog_features = np.ravel(hog_features)        
     else:
         hog_features = layered_areas_hog[layer_num][hoga_y1:hoga_y2,hoga_x1:hoga_x2,:,:,:]
         hog_features = np.ravel(hog_features)
-    
-    zoom=window_size/spatial_size
+    #####   Spatial Color   #####
+    zoom=spatial_size/window_size
     x1s=int(x1*zoom)
     x2s=int(x2*zoom)
     y1s=int(y1*zoom)
@@ -189,9 +129,72 @@ for window in windows:
     spatial_features=np.hstack((layered_areas_spatial[layer_num][y1s:y2s,x1s:x2s,0].ravel(),\
                                layered_areas_spatial[layer_num][y1s:y2s,x1s:x2s,1].ravel(),\
                                layered_areas_spatial[layer_num][y1s:y2s,x1s:x2s,2].ravel()))
+    #####   Color histogram   #####
+    chist_features=(color_hist(img[window[0][1]:window[1][1],window[0][0]:window[1][0],:], hist_bins, hist_range))/(window_size**2)*(64**2) #norm the histogram as if the window had 64x64 px
     
-    window_features.append(np.concatenate(spatial_features,hog_features))
-    #to do schauen nach dateiformat in training 0-1 0-255....
+    window_features.append(np.concatenate((spatial_features,chist_features,hog_features)))
+print("--- %s seconds ---" % (time.time() - start_time))
+
+
+# Define the features vector    
+X = np.vstack(window_features).astype(np.float64)
+# Define the labels vector
+y = np.ones(len(window_features))
+
+scaled_X = X_scaler.transform(X)
+
+p1=svc.decision_function(scaled_X)+0.5
+p1[p1<0]=0
+p2=rand_forr.predict_proba(scaled_X[:,0:len_features[0]+len_features[1]-1])[:,1]
+
+pt=np.multiply(p1,p2)
+
+print("--- %s seconds ---" % (time.time() - start_time))
+prob_thres=1 #probability threshold
+bbox_list=[]
+for bbox, bit in zip(windows,pt):
+    if bit>=prob_thres:
+        bbox_list.append(bbox)
+pp = pt[(pt >= prob_thres)]
+    
+out=draw_boxes(img, bbox_list, (0, 0, 255), 6)
+out=cv2.cvtColor(out,cv2.COLOR_BGR2RGB)
+plt.imsave('foo2.png',out)
+print("--- %s seconds ---" % (time.time() - start_time))
+
+#heatmap=np.zeros_like(img[:,:,0]).astype(float)
+heatmap=add_heat2(img, bbox_list,pp)
+#heatmap=add_heat(heatmap, bbox_list)
+#heatmap[(heatmap < 2)]=0
+#heatmap[(heatmap > 10)]=10
+labels2 = label(heatmap)
+draw_img1 = draw_boxes(np.copy(img), bbox_list, color=(0, 0, 255), thick=6)
+draw_img2 = draw_labeled_bboxes(np.copy(img), labels2)
+#heatmap=cv2.GaussianBlur(heatmap,(101,101),0)
+
+
+print("--- %s seconds ---" % (time.time() - start_time))
+
+fig = plt.figure(figsize=(20,6))
+plt.subplot(131)
+plt.imshow(draw_img1)
+plt.title('All positive windows')
+plt.subplot(132)
+sns.heatmap(heatmap, cbar = True, square = True, annot=False,yticklabels=False,xticklabels=False,  cmap= 'inferno')
+#plt.show()
+plt.title('Filtered heatmap')
+plt.subplot(133)
+plt.imshow(draw_img2)
+plt.title('The car(s) detected')
+plt.tight_layout()
+
+fig.savefig('plot.png')
+
+
+
+
+
+
 #           
 ##out_img = find_cars(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins)
 #

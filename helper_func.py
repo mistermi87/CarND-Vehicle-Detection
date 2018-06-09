@@ -7,24 +7,7 @@ Created on Fri May 25 17:45:15 2018
 
 import numpy as np
 import cv2
-import matplotlib.image as mpimg
-#import pickle
 from skimage.feature import hog
-
-
-def convert_color(img, conv):
-    if conv != 'RGB':
-        if conv == 'HSV':
-            return cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-        elif conv == 'LUV':
-            return cv2.cvtColor(img, cv2.COLOR_RGB2LUV)
-        elif conv == 'HLS':
-            return cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
-        elif conv == 'YUV':
-            return cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
-        elif conv == 'YCrCb':
-            return cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
-    else: return img
 
 
 def get_hog_features(img, orient, pix_per_cell, cell_per_block, 
@@ -74,37 +57,39 @@ def extract_features(imgs, cspace_c, spatial_size, hist_bins, hist_range, cspace
             
     # Read in each one by one
         image=cv2.imread(img_f)
-        # apply color conversion if other than 'RGB'
-        if cspace_c != 'RGB':
-            if cspace_c == 'HSV':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        c_features=color_hist(image, nbins=hist_bins, bins_range=hist_range)
+        # apply color conversion if other than 'BGR'
+        
+        if cspace_c != 'BGR':
+            if cspace_c == 'YCrCb':
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
             elif cspace_c == 'LUV':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2LUV)
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2LUV)
             elif cspace_c == 'HLS':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2HLS)
             elif cspace_c == 'YUV':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
-            elif cspace_c == 'YCrCb':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2YUV)
+            elif cspace_c == 'RGB':
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         else: img = np.copy(image)
         ######Color features          
         # Apply bin_spatial() to get spatial color features
         s_features=bin_spatial(img, size=spatial_size)
         # Apply color_hist() to get color histogram features
-        c_features=color_hist(img, nbins=hist_bins, bins_range=hist_range)
         
-        if cspace_h != 'RGB':
-            if cspace_h == 'HSV':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        
+        if cspace_h != 'BGR':
+            if cspace_h == 'YCrCb':
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
             elif cspace_h == 'LUV':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2LUV)
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2LUV)
             elif cspace_h == 'HLS':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2HLS)
             elif cspace_h == 'YUV':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
-            elif cspace_h == 'YCrCb':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
-        else: img = np.copy(image)          
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2YUV)
+            elif cspace_h == 'RGB':
+                img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        else: img = np.copy(image)     
         ######HOG features
         if hog_channel == 'ALL':
             hog_features = []
@@ -118,12 +103,13 @@ def extract_features(imgs, cspace_c, spatial_size, hist_bins, hist_range, cspace
                         pix_per_cell, cell_per_block, vis=False, feature_vec=True)
             
         # Append the new feature vector to the features list
+        #print(len(hog_features))
         feature=np.concatenate((s_features,c_features, hog_features))
         
         features.append(feature)
         print(img_f)
     # Return list of feature vectors
-    return features
+    return features, (len(s_features),len(c_features),len(hog_features))
 
 def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Make a copy of the image
@@ -137,62 +123,15 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Return the image copy with boxes drawn
     return imcopy
 
-# =============================================================================
-# def slide_window(img, x_start_stop=[None, None], y_start_stop=[None, None], 
-#                     xy_window=(64, 64), xy_overlap=(0.5, 0.5)):
-#     # If x and/or y start/stop positions not defined, set to image size
-#     if x_start_stop[0]==None: x_start_stop[0]=0
-#     if x_start_stop[1]==None: x_start_stop[1]=img.shape[1]
-#     if y_start_stop[0]==None: y_start_stop[0]=0
-#     if y_start_stop[1]==None: y_start_stop[1]=img.shape[0]
-#     # Compute the span of the region to be searched
-#     span_x=x_start_stop[1]-x_start_stop[0]
-#     span_y=y_start_stop[1]-y_start_stop[0]
-#     # Compute the number of pixels per step in x/y
-#     pps_xy=np.multiply(xy_window,xy_overlap)
-#     # Compute the number of windows in x/y
-#     windows_x = 1 + (span_x - xy_window[0])/(xy_window[0] * xy_overlap[0])
-#     windows_y = 1 + (span_y - xy_window[1])/(xy_window[1] * xy_overlap[1])
-#     i_windows_x=np.floor(windows_x).astype(int)
-#     i_windows_y=np.floor(windows_y).astype(int)
-#     r_windows_x=windows_x-i_windows_x
-#     r_windows_y=windows_y-i_windows_y
-#     # Initialize a list to append window positions to
-#     window_list = []
-#     # Loop through finding x and y window positions
-#     for i in range(i_windows_x):
-#         for j in range(i_windows_y):
-#             position_x=int(x_start_stop[0]+i*xy_window[0]*xy_overlap[0])
-#             position_y=int(y_start_stop[0]+j*xy_window[1]*xy_overlap[1])
-#             window_list.append(((position_x,position_y),(position_x+xy_window[0],position_y+xy_window[1])))
-#         if r_windows_y>0:
-#             position_x=int(x_start_stop[0]+i*xy_window[0]*xy_overlap[0])
-#             position_y=int(y_start_stop[1]-xy_window[1])
-#             window_list.append(((position_x,position_y),(position_x+xy_window[0],position_y+xy_window[1])))
-#     if r_windows_x>0:
-#         for j in range(i_windows_y):
-#             position_x=int(x_start_stop[1]-xy_window[0])
-#             position_y=int(y_start_stop[0]+j*xy_window[1]*xy_overlap[1])
-#             window_list.append(((position_x,position_y),(position_x+xy_window[0],position_y+xy_window[1])))
-#     
-#             
-#         # Note: you could vectorize this step, but in practice
-#         # you'll be considering windows one by one with your
-#         # classifier, so looping makes sense
-#         # Calculate each window position
-#         # Append window position to list
-#     # Return the list of windows
-#     return window_list
-# =============================================================================
 
-def slide_window2(img, layers,vert_steps,y_start,y_stop, xy_overlap):
+def slide_window(img_width, layers,vert_steps,y_start,y_stop, xy_overlap):
     window_list=[]
     # If x and/or y start/stop positions not defined, set to image size
     for xy_window in layers:
         for i in range(vert_steps):
-            position_x1=np.arange(0,img.shape[1]-int(xy_window*xy_overlap),int(xy_window*xy_overlap))
+            position_x1=np.arange(0,img_width-int(xy_window)+1,int(xy_window*(xy_overlap)))
             position_x2=position_x1+xy_window
-            position_y1=(y_start*np.ones_like(position_x1)+i*xy_window*xy_overlap).astype(int)
+            position_y1=(y_start*np.ones_like(position_x1)+i*xy_window*(xy_overlap)).astype(int)
             position_y2=position_y1+xy_window
             if position_y2[0]<=y_stop:
                 window_list.extend(list(zip(list(zip(position_x1,position_y1)),list(zip(position_x2,position_y2)))))
@@ -200,52 +139,50 @@ def slide_window2(img, layers,vert_steps,y_start,y_stop, xy_overlap):
 
 def get_spatial_whole_area(image, cspace_c,spatial_size, y_start, y_stop, layers, xy_overlap, vert_steps):
     if cspace_c != 'RGB':
-            if cspace_c == 'HSV':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-            elif cspace_c == 'LUV':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2LUV)
-            elif cspace_c == 'HLS':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
-            elif cspace_c == 'YUV':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
-            elif cspace_c == 'YCrCb':
-                img = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
+        if cspace_c == 'YCrCb':
+            img = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
+        elif cspace_c == 'LUV':
+            img = cv2.cvtColor(image, cv2.COLOR_RGB2LUV)
+        elif cspace_c == 'HLS':
+            img = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
+        elif cspace_c == 'YUV':
+            img = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
+        elif cspace_c == 'BGR':
+            img = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     else: img = np.copy(image)
     # resize image
     whole_area_spatial=[]
-    whole_area_ch=[]
     for layer in layers:
         resize_factor_s=spatial_size/layer
-        resize_factor_ch=64/layer
+        #resize_factor_ch=64/layer
         y_stop_n=np.min([int(y_start+layer*xy_overlap*(vert_steps-1)+layer),y_stop])
         layer_spatial=cv2.resize(img[y_start:y_stop_n,:,:],None,fx=resize_factor_s, fy=resize_factor_s, interpolation = cv2.INTER_AREA)
-        layer_ch=cv2.resize(img[y_start:y_stop_n,:,:],None,fx=resize_factor_ch, fy=resize_factor_ch, interpolation = cv2.INTER_AREA)
         whole_area_spatial.append(layer_spatial)
-        whole_area_ch.append(layer_ch)
-    return whole_area_spatial, whole_area_ch
+    return whole_area_spatial
+
+
 
 def get_hog_whole_area(image, orient, pix_per_cell, cell_per_block, cspace_h, hog_channel, y_start, y_stop, layers, xy_overlap, vert_steps):
     #change color of frame for hog_analysis, according to training features
     if cspace_h != 'RGB':
-        if cspace_h == 'HSV':
-            img = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        if cspace_h == 'YCrCb':
+            img = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
         elif cspace_h == 'LUV':
             img = cv2.cvtColor(image, cv2.COLOR_RGB2LUV)
         elif cspace_h == 'HLS':
             img = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
         elif cspace_h == 'YUV':
             img = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
-        elif cspace_h == 'YCrCb':
-            img = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
+        elif cspace_h == 'BGR':
+            img = cv2.cvtColor(image, cv2.COLOR_RGB2RGB)
     else: img = np.copy(image)
         
-    # Create HOG for area
+    # Create HOG for area with each layer zoomed acording to training size
     whole_area_hog=[] 
     if hog_channel == 'ALL':
          for layer in layers:
              y_stop_n=np.min([int(y_start+layer*xy_overlap*(vert_steps-1)+layer),y_stop])
              pix_per_cell_n=int(pix_per_cell*layer/64) #64=size of training data=same size of sliding windows
-             print(pix_per_cell_n, y_stop_n)
              layer_hog = []
              for channel in range(img.shape[2]):
                  layer_hog.append(hog(img[y_start:y_stop_n,:,channel], orientations=orient, 
@@ -265,4 +202,41 @@ def get_hog_whole_area(image, orient, pix_per_cell, cell_per_block, cspace_h, ho
                              visualise=False, feature_vector=False)
              whole_area_hog.append(layer_hog)
     return whole_area_hog
-    
+ 
+def add_heat(heatmap, bbox_list):
+    # Iterate through list of bboxes
+    for box in bbox_list:
+        # Add += 1 for all pixels inside each bbox
+        # Assuming each "box" takes the form ((x1, y1), (x2, y2))
+        heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
+
+    # Return updated heatmap
+    return heatmap
+
+def add_heat2(img, bbox_list,p):
+    #create empy heatmap
+    heatmap=np.zeros_like(img[:,:,0]).astype(np.float64)
+    # Iterate through list of bboxes
+    for prob, box in zip(p,bbox_list):
+        # Add += 1 for all pixels inside each bbox
+        # Assuming each "box" takes the form ((x1, y1), (x2, y2))
+        heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += prob
+
+    # Return updated heatmap
+    return heatmap
+
+
+def draw_labeled_bboxes(img, labels):
+    # Iterate through all detected cars
+    for car_number in range(1, labels[1]+1):
+        # Find pixels with each car_number label value
+        nonzero = (labels[0] == car_number).nonzero()
+        # Identify x and y values of those pixels
+        nonzeroy = np.array(nonzero[0])
+        nonzerox = np.array(nonzero[1])
+        # Define a bounding box based on min/max x and y
+        bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+        # Draw the box on the image
+        cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
+    # Return the image
+    return img
